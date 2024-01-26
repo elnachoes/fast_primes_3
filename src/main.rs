@@ -1,8 +1,8 @@
-use core::num;
 use std::{
-    thread::{spawn, Thread, ThreadId, JoinHandle, self},
+    thread::{spawn, JoinHandle},
     sync::mpsc::{self, Sender, Receiver},
-    iter::Iterator
+    iter::Iterator,
+    env
 };
 
 fn check_if_prime(n : u64) -> bool {
@@ -42,78 +42,114 @@ enum PrimeTestThreadCommand {
     Shutdown
 }
 
+#[derive(Debug, Clone, Copy)]
 struct PrimeTestThreadResult {
-    pub thread_id : ThreadId,
     pub number : u64,
     pub is_prime : bool,
 }
 
 /// main thread -> PrimeTesterThreadCommand : prime tester thread
 /// 
-/// main thread <- (number, is_prime, thread_id)
-/// 
-/// TODO we should probably implement drop on this to cleanup
+/// main thread <- PrimeTestThreadResult 
 struct PrimeTesterThread {
-    test_prime_send_chan : Sender<PrimeTestThreadCommand>,
+    command_chan : Sender<PrimeTestThreadCommand>,
+    prime_result_chan : Receiver<PrimeTestThreadResult>, 
     join_handle : Option<JoinHandle<()>>
 }
 impl PrimeTesterThread {
     /// this will start a prime tester thread. this thread will receive a number to test for primality and it will send the result to a given channel.
     /// this thread will block waiting for a number to test until a number is received or a shut down command is issued through the shuttdown method.
-    pub fn start(result_send_chan : Sender<PrimeTestThreadResult>) -> Self {
-        let (test_prime_send_chan, test_prime_recv_chan) = mpsc::channel::<PrimeTestThreadCommand>();
-        let join_handle = spawn(move || Self::prime_tester_thread_task(test_prime_recv_chan, result_send_chan));
+    pub fn new() -> Self {
+        let (command_send_chan, command_recv_chan) = mpsc::channel::<PrimeTestThreadCommand>();
+        let (prime_result_send_chan, prime_result_recv_chan) = mpsc::channel::<PrimeTestThreadResult>();
+        let join_handle = spawn(move || Self::prime_tester_thread_task(command_recv_chan, prime_result_send_chan));
         Self {
-            test_prime_send_chan : test_prime_send_chan,
+            command_chan: command_send_chan,
+            prime_result_chan : prime_result_recv_chan,
             join_handle : Some(join_handle)
         }
     }
 
-    pub fn test_potential_prime(&mut self, n : u64) {
-        self.test_prime_send_chan.send(PrimeTestThreadCommand::Test(n)).unwrap()
+    /// this will instruct a thread to test a number for primality. the result will be sent through the result channel.
+    pub fn test_prime(&mut self, n : u64) {
+        self.command_chan.send(PrimeTestThreadCommand::Test(n)).unwrap();
+    }
+    
+    pub fn try_get_result(&mut self) -> Result<PrimeTestThreadResult, mpsc::TryRecvError> {
+        self.prime_result_chan.try_recv()
     }
 
     pub fn shutdown(&mut self) {
+        self.command_chan.send(PrimeTestThreadCommand::Shutdown).unwrap();
         if self.join_handle.is_some() {
             self.join_handle.take().unwrap().join().unwrap()
         }
     }
 
-    fn prime_tester_thread_task(test_prime_recv_chan : Receiver<PrimeTestThreadCommand>, result_send_chan : Sender<PrimeTestThreadResult>) {
-        'threadloop: loop  {
-            match test_prime_recv_chan.try_recv() {
+    fn prime_tester_thread_task(command_recv_chan : Receiver<PrimeTestThreadCommand>, result_send_chan : Sender<PrimeTestThreadResult>) {
+        loop  {
+            match command_recv_chan.recv() {
                 Ok(PrimeTestThreadCommand::Test(number)) => {
+                    // dprint(format!("prime tester thread got number to test {:?}", number));
                     let result = PrimeTestThreadResult {
-                        thread_id : thread::current().id(),
                         number : number,
                         is_prime : check_if_prime(number)
                     };
 
-                    // NOTE might be some errors happnin here unsure just yet probably not
                     result_send_chan.send(result).unwrap()
                 },
-                Ok(PrimeTestThreadCommand::Shutdown) => break 'threadloop,
-                Err(_) => {
-                    // NOTE may be worth inspecting here if shit is going sideways
-                }, 
+                Ok(PrimeTestThreadCommand::Shutdown) => break,
+                Err(_) => {}, 
             }
         }
     }
 }
 impl Drop for PrimeTesterThread {
     fn drop(&mut self) {
-        self.test_prime_send_chan.send(PrimeTestThreadCommand::Shutdown).unwrap();
         self.shutdown()
     }
 }
 
 //TODO :
-struct PrimeTesterThreadPool {
-    threads : Vec<PrimeTesterThread>
+fn n_prime(n : usize, n_threads : usize) -> u64 {
+    // setup the found primes buffer and also skip the second prime
+    if n == 1 { return 2 }
+    let mut p_prime_gen = PotentialPrimesGenerator::new().skip(1);
+    let mut found_primes : Vec<u64> = vec![2];
+
+    // spawn the threads and give them a prime to process
+    let mut threads : Vec<PrimeTesterThread> = (0..n_threads)
+        .into_iter()
+        .map(|_| {
+            let mut thread = PrimeTesterThread::new();
+            thread.test_prime(p_prime_gen.next().unwrap());
+            thread
+        })
+        .collect();
+
+    loop {
+        // should check if the prime got found here
+        if found_primes.len() >= n {
+            // TODO : this needs to do a check that every tested prime is in consecutive order of found primes
+            found_primes.sort();
+            return *found_primes.last().unwrap();
+        }
+
+        for thread in threads.iter_mut() {
+            if let Ok(result) = thread.try_get_result() {
+                if result.is_prime {
+                    found_primes.push(result.number);
+                }
+                thread.test_prime(p_prime_gen.next().unwrap())
+            }
+        }
+    }
 }
 
-fn main() {
-    let mut p_prime_gen = PotentialPrimesGenerator::new();
+fn main() -> Result<(), String> {
+    // let args : Vec<String> = env::args().collect();
+    // if args.len() != 2
 
-    let (sender, receiver) = mpsc::channel::<(f64, bool)>();
+    println!("{:?}", n_prime(100, 11));
+    Ok(())
 }
