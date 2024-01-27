@@ -48,9 +48,7 @@ struct PrimeTestThreadResult {
     pub is_prime : bool,
 }
 
-/// main thread -> PrimeTesterThreadCommand : prime tester thread
-/// 
-/// main thread <- PrimeTestThreadResult 
+/// This is a smart thread that will test numbers for primality in a background thread.
 struct PrimeTesterThread {
     command_chan : Sender<PrimeTestThreadCommand>,
     prime_result_chan : Receiver<PrimeTestThreadResult>, 
@@ -90,7 +88,6 @@ impl PrimeTesterThread {
         loop  {
             match command_recv_chan.recv() {
                 Ok(PrimeTestThreadCommand::Test(number)) => {
-                    // dprint(format!("prime tester thread got number to test {:?}", number));
                     let result = PrimeTestThreadResult {
                         number : number,
                         is_prime : check_if_prime(number)
@@ -147,9 +144,11 @@ fn n_prime(n : usize, n_threads : usize) -> u64 {
 }
 
 fn main() -> Result<(), String> {
-    // let args : Vec<String> = env::args().collect();
-    // if args.len() != 2
-
-    println!("{:?}", n_prime(100, 11));
+    let args : Vec<String> = env::args().collect();
+    if args.len() != 3 { return Err("expected 2 args for x prime and y worker threads".to_string()) }
+    let n : usize = args[1].parse().or(Err("missing first arg : expected positive whole number to test for primality".to_string()))?;
+    let n_threads : usize = args[2].parse().or(Err("missing second arg : expected positive whole number of worker threads".to_string()))?;
+    println!("calculating...");
+    println!("{:?}", n_prime(n, n_threads));
     Ok(())
 }

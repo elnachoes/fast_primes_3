@@ -10,7 +10,7 @@
             "type": "cppvsdbg",
             "request": "launch",
             "program": "${workspaceFolder}/target/debug/fast_primes.exe",
-            "args": [],
+            "args": ["5_000", "11"],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
             "environment": [],
