@@ -1,10 +1,19 @@
 use std::{
-    thread::{spawn, JoinHandle},
-    sync::mpsc::{self, Sender, Receiver},
-    iter::Iterator,
-    env
+    env, 
+    iter::Iterator, 
+    sync::mpsc::{
+        self, 
+        Sender, 
+        Receiver
+    }, 
+    thread::{
+        spawn, 
+        JoinHandle
+    },
+    time::Instant
 };
 
+/// check if prime function I found on wikipedia that is the best 100% accurate primeality test.
 fn check_if_prime(n : u64) -> bool {
     if n == 2 || n == 3 { return true }
     if n % 2 == 0 || n % 3 == 0 { return false }
@@ -14,6 +23,7 @@ fn check_if_prime(n : u64) -> bool {
     true
 }
 
+/// this struct is used as an iterator for generating all possible numbers that could be prime.
 struct PotentialPrimesGenerator {
     current : u64,
 }
@@ -36,12 +46,13 @@ impl Iterator for PotentialPrimesGenerator {
     }
 }
 
+/// this represents a command that can be sent to a prime tester thread.
 enum PrimeTestThreadCommand {
-    //TODO hey you know what we might consider trying testing a whole list
     Test(u64),
     Shutdown
 }
 
+/// this represents a result of a primality test on the prime tester thread.
 #[derive(Debug, Clone, Copy)]
 struct PrimeTestThreadResult {
     pub number : u64,
@@ -107,12 +118,11 @@ impl Drop for PrimeTesterThread {
     }
 }
 
-//TODO :
 fn n_prime(n : usize, n_threads : usize) -> u64 {
     // setup the found primes buffer and also skip the second prime
     if n == 1 { return 2 }
-    let mut p_prime_gen = PotentialPrimesGenerator::new().skip(1);
-    let mut found_primes : Vec<u64> = vec![2];
+    let mut p_prime_gen = PotentialPrimesGenerator::new();
+    let mut found_primes : Vec<u64> = vec![p_prime_gen.next().unwrap()];
 
     // spawn the threads and give them a prime to process
     let mut threads : Vec<PrimeTesterThread> = (0..n_threads)
@@ -124,14 +134,7 @@ fn n_prime(n : usize, n_threads : usize) -> u64 {
         })
         .collect();
 
-    loop {
-        // should check if the prime got found here
-        if found_primes.len() >= n {
-            // TODO : this needs to do a check that every tested prime is in consecutive order of found primes
-            found_primes.sort();
-            return *found_primes.last().unwrap();
-        }
-
+    while found_primes.len() < n {
         for thread in threads.iter_mut() {
             if let Ok(result) = thread.try_get_result() {
                 if result.is_prime {
@@ -141,6 +144,20 @@ fn n_prime(n : usize, n_threads : usize) -> u64 {
             }
         }
     }
+
+    threads
+        .iter_mut()
+        .for_each(|thread| {
+            while let Ok(result) = thread.try_get_result() {
+                if result.is_prime {
+                    found_primes.push(result.number)
+                }
+            }
+        });
+
+    found_primes.sort();
+
+    return *found_primes.iter().nth(n - 1).unwrap()
 }
 
 fn main() -> Result<(), String> {
@@ -149,6 +166,7 @@ fn main() -> Result<(), String> {
     let n : usize = args[1].parse().or(Err("missing first arg : expected positive whole number to test for primality".to_string()))?;
     let n_threads : usize = args[2].parse().or(Err("missing second arg : expected positive whole number of worker threads".to_string()))?;
     println!("calculating...");
-    println!("{:?}", n_prime(n, n_threads));
+    let start_time = Instant::now();
+    println!("number : {:?}, time elapsed : {:?}", n_prime(n, n_threads), start_time.elapsed());
     Ok(())
 }
