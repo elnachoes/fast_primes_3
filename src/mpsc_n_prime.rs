@@ -11,7 +11,7 @@ use std::{
     },
 };
 
-use crate::prime::{PotentialPrimesGenerator, check_if_prime};
+use crate::{models::TestedNumbersState, prime::{PotentialPrimesGenerator, check_if_prime}};
 
 
 /// this represents a command that can be sent to a prime tester thread.
@@ -117,3 +117,35 @@ pub fn n_prime(n : usize, n_threads : usize) -> u64 {
 
     return *found_primes.iter().nth(n - 1).unwrap()
 }
+
+// pub fn n_prime(n : usize, n_threads : usize) -> u64 {
+//     // setup the found primes buffer and also skip the second prime
+//     if n == 1 { return 2 }
+//     let tested_numbers = TestedNumbersState::new();
+
+//     // spawn the threads and give them a prime to process
+//     let mut threads : Vec<PrimeTesterThread> = (0..n_threads)
+//         .into_iter()
+//         .map(|_| {
+//             let mut thread = PrimeTesterThread::new();
+//             thread.test_prime(tested_numbers.test_new_number());
+//             thread
+//         })
+//         .collect();
+
+//     while tested_numbers.found_primes_count() < n {
+//         for thread in threads.iter_mut() {
+//             if let Ok(result) = thread.try_get_result() {
+//                 if result.is_prime {
+//                     tested_numbers.complete_tested_number(number, is_prime);
+//                 }
+//                 thread.test_prime(p_prime_gen.next().unwrap())
+//             }
+//         }
+//     }
+
+//     // found_primes.sort();
+
+//     // return *found_primes.iter().nth(n - 1).unwrap()
+//     0
+// }
