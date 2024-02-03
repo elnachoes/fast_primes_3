@@ -2,7 +2,7 @@ use std::{
     env, 
     time::Instant
 };
-use fast_primes::{self, mpsc_n_prime, mutex_n_prime};
+use fast_primes_3::{self, mpsc_n_prime, };
 
 fn main() -> Result<(), String> {
     let args : Vec<String> = env::args().collect();
@@ -11,6 +11,6 @@ fn main() -> Result<(), String> {
     let n_threads : usize = args[2].parse().or(Err("missing second arg : expected positive whole number of worker threads".to_string()))?;
     println!("calculating...");
     let start_time = Instant::now();
-    println!("number : {:?}, time elapsed : {:?}", mutex_n_prime::n_prime(n, n_threads), start_time.elapsed());
+    println!("number : {:?}, time elapsed : {:?}", mpsc_n_prime::n_prime(n, n_threads), start_time.elapsed());
     Ok(())
 }

@@ -1,7 +1,5 @@
-use core::num;
 use std::{
-    collections::{BTreeMap, HashMap},
-    fmt::Display, io::Lines, net::Shutdown, sync::{
+    fmt::Display, sync::{
         mpsc::{
             self, Receiver, Sender
         }, 
@@ -10,8 +8,7 @@ use std::{
     }, 
     thread::{JoinHandle, spawn},
 };
-use crate::prime::{self, PotentialPrimesGenerator};
-use itertools::*; 
+use crate::prime::{self};
 use crate::models::*;
 
 struct AtomicTestedNumbersState {
@@ -33,12 +30,7 @@ impl AtomicTestedNumbersState {
     }
 
     pub fn nth_prime(&self, n : usize) -> Option<u64> {
-        // println!("{}", self.tested_numbers_state.lock().unwrap());
         self.tested_numbers_state.lock().unwrap().nth_prime(n)
-    }
-
-    pub fn check_numbers_processing(&self) -> bool {
-        self.tested_numbers_state.lock().unwrap().numbers_processing()
     }
 
     pub fn found_primes_count(&self) -> usize {
@@ -70,7 +62,6 @@ impl Display for TestedNumbersState {
 /// this represents a command that can be sent to a prime tester thread.
 enum PrimeTestThreadCommand {
     Shutdown
-    // TODO : pause maybe?
 }
 
 struct PrimeTesterThread {

@@ -1,5 +1,4 @@
-use core::num;
-use std::{iter::Iterator, path::Iter};
+use std::iter::Iterator;
 
 #[derive(Clone, Copy, Debug)]
 pub enum CheckIfPrimeState {
@@ -88,12 +87,30 @@ impl Iterator for PotentialPrimesGenerator {
     type Item = u64;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let val = self.current;
-        if val == 2 {
-            self.current += 1
-        } else {
-            self.current += 2
+        let divisibility_filters : &'static[u64] = &[3,5,9,7,11];
+        if self.current == 2 {
+            let val = self.current; 
+            self.current += 1;
+            Some(val)
         }
-        Some(val)
+        else if divisibility_filters.contains(&self.current) {
+            let val = self.current; 
+            self.current += 2;
+            Some(val)
+        }
+        else {
+            if divisibility_filters.iter().any(|filter| self.current % filter == 0) {
+                while divisibility_filters.iter().any(|filter| self.current % filter == 0) {
+                    self.current += 2
+                }
+                let val = self.current; 
+                self.current += 2;
+                Some(val)
+            } else {
+                let val = self.current; 
+                self.current += 2;
+                Some(val)
+            }
+        }
     }
 }
