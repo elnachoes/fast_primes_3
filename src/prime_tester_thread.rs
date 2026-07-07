@@ -9,6 +9,8 @@ use std::{
     thread::{spawn, JoinHandle},
 };
 use std::collections::BTreeSet;
+use std::time::Instant;
+use indicatif::ProgressBar;
 use crate::prime::{PotentialPrimesGenerator, check_if_prime};
 
 
@@ -105,12 +107,16 @@ impl Drop for PrimeTesterThread {
     }
 }
 
-pub fn n_prime(n : usize, n_threads : usize) -> u64 {
+pub fn n_prime_cli(n : usize, n_threads : usize) -> u64 {
+    println!("calculating...");
+    let progress_bar = ProgressBar::new(n as u64);
+    let start_time = Instant::now();
     // setup the found primes buffer and also skip the second prime
     if n == 1 { return 2 }
     let mut p_prime_gen = PotentialPrimesGenerator::new();
     let mut found_primes : BTreeSet<u64> = BTreeSet::from([p_prime_gen.next().unwrap()]);
-
+    progress_bar.inc(1);
+    
     // spawn the threads and give them a prime to process
     let mut threads : Vec<PrimeTesterThread> = (0..n_threads)
         .into_iter()
@@ -127,6 +133,7 @@ pub fn n_prime(n : usize, n_threads : usize) -> u64 {
             if let Ok(result) = thread.try_get_result() {
                 if result.is_prime {
                     found_primes.insert(result.number);
+                    progress_bar.inc(1);
                 }
                 if found_primes.len() < n {
                     thread.test_prime(p_prime_gen.next().unwrap())
@@ -134,6 +141,10 @@ pub fn n_prime(n : usize, n_threads : usize) -> u64 {
             }
         }
     }
+    progress_bar.finish();
+    let result = *found_primes.iter().nth(n - 1).unwrap();
 
-    *found_primes.iter().nth(n - 1).unwrap()
+    println!("number : {:?}, time elapsed : {:?}", result, start_time.elapsed());
+
+    result
 }
