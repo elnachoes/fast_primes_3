@@ -1,5 +1,4 @@
 use std::{
-    iter::Iterator, 
     sync::mpsc::{
         channel,
         TryRecvError,
@@ -8,21 +7,18 @@ use std::{
     }, 
     thread::{spawn, JoinHandle},
 };
-use std::collections::BTreeSet;
-use std::time::Instant;
-use indicatif::ProgressBar;
-use crate::prime::{PotentialPrimesGenerator, check_if_prime};
+use crate::prime::check_if_prime;
 
 
 /// this represents a command that can be sent to a prime tester thread.
-enum PrimeTestThreadCommand {
+pub enum PrimeTestThreadCommand {
     Test(u64),
     Shutdown
 }
 
 /// this represents what state the prime tester thread is in.
 #[derive(Debug, Clone, Copy)]
-enum PrimeTestThreadState {
+pub enum PrimeTestThreadState {
     Idle,
     Testing
 }
@@ -34,13 +30,13 @@ impl PrimeTestThreadState {
 
 /// this represents a result of a primality test on the prime tester thread.
 #[derive(Debug, Clone, Copy)]
-struct PrimeTestThreadResult {
+pub struct PrimeTestThreadResult {
     pub number : u64,
     pub is_prime : bool,
 }
 
 /// This is a smart thread that will test numbers for primality in a background thread.
-struct PrimeTesterThread {
+pub struct PrimeTesterThread {
     command_chan : Sender<PrimeTestThreadCommand>,
     state_chan : Receiver<PrimeTestThreadState>,
     prime_result_chan : Receiver<PrimeTestThreadResult>,
@@ -105,46 +101,4 @@ impl Drop for PrimeTesterThread {
     fn drop(&mut self) {
         self.shutdown()
     }
-}
-
-pub fn n_prime_cli(n : usize, n_threads : usize) -> u64 {
-    println!("calculating...");
-    let progress_bar = ProgressBar::new(n as u64);
-    let start_time = Instant::now();
-    // setup the found primes buffer and also skip the second prime
-    if n == 1 { return 2 }
-    let mut p_prime_gen = PotentialPrimesGenerator::new();
-    let mut found_primes : BTreeSet<u64> = BTreeSet::from([p_prime_gen.next().unwrap()]);
-    progress_bar.inc(1);
-    
-    // spawn the threads and give them a prime to process
-    let mut threads : Vec<PrimeTesterThread> = (0..n_threads)
-        .into_iter()
-        .map(|_| {
-            let mut thread = PrimeTesterThread::new();
-            thread.test_prime(p_prime_gen.next().unwrap());
-            thread
-        })
-        .collect();
-
-    // test new primes while the prime hasn't been found and also while there are still threads active.
-    while found_primes.len() < n || threads.iter_mut().any(|t| t.try_get_state().is_ok_and(|r| r.is_testing())) {
-        for thread in threads.iter_mut() {
-            if let Ok(result) = thread.try_get_result() {
-                if result.is_prime {
-                    found_primes.insert(result.number);
-                    progress_bar.inc(1);
-                }
-                if found_primes.len() < n {
-                    thread.test_prime(p_prime_gen.next().unwrap())
-                }
-            }
-        }
-    }
-    progress_bar.finish();
-    let result = *found_primes.iter().nth(n - 1).unwrap();
-
-    println!("number : {:?}, time elapsed : {:?}", result, start_time.elapsed());
-
-    result
 }
