@@ -8,7 +8,7 @@ use std::{
     }, 
     thread::{spawn, JoinHandle},
 };
-
+use std::collections::BTreeSet;
 use crate::prime::{PotentialPrimesGenerator, check_if_prime};
 
 
@@ -16,6 +16,22 @@ use crate::prime::{PotentialPrimesGenerator, check_if_prime};
 enum PrimeTestThreadCommand {
     Test(u64),
     Shutdown
+}
+
+/// this represents what state the prime tester thread is in.
+#[derive(Debug, Clone, Copy)]
+enum PrimeTestThreadState {
+    Idle,
+    Testing
+}
+impl PrimeTestThreadState {
+    pub fn is_idle(&self) -> bool {
+        if let Self::Idle = self { true } else { false }
+    }
+
+    pub fn is_testing(&self) -> bool {
+        if let Self::Testing = self { true } else { false }
+    }
 }
 
 /// this represents a result of a primality test on the prime tester thread.
@@ -28,7 +44,8 @@ struct PrimeTestThreadResult {
 /// This is a smart thread that will test numbers for primality in a background thread.
 struct PrimeTesterThread {
     command_chan : Sender<PrimeTestThreadCommand>,
-    prime_result_chan : Receiver<PrimeTestThreadResult>, 
+    state_chan : Receiver<PrimeTestThreadState>,
+    prime_result_chan : Receiver<PrimeTestThreadResult>,
     join_handle : Option<JoinHandle<()>>
 }
 impl PrimeTesterThread {
@@ -37,8 +54,10 @@ impl PrimeTesterThread {
     pub fn new() -> Self {
         let (command_send_chan, command_recv_chan) = channel::<PrimeTestThreadCommand>();
         let (prime_result_send_chan, prime_result_recv_chan) = channel::<PrimeTestThreadResult>();
-        let join_handle = spawn(move || Self::prime_tester_thread_task(command_recv_chan, prime_result_send_chan));
+        let (state_send_chan, state_recv_chan) = channel::<PrimeTestThreadState>();
+        let join_handle = spawn(move || Self::prime_tester_thread_task(command_recv_chan, prime_result_send_chan, state_send_chan));
         Self {
+            state_chan : state_recv_chan,
             command_chan: command_send_chan,
             prime_result_chan : prime_result_recv_chan,
             join_handle : Some(join_handle)
@@ -54,6 +73,10 @@ impl PrimeTesterThread {
         self.prime_result_chan.try_recv()
     }
 
+    pub fn try_get_state(&mut self) -> Result<PrimeTestThreadState, TryRecvError> {
+        self.state_chan.try_recv()
+    }
+
     pub fn shutdown(&mut self) {
         if self.join_handle.is_some() {
             self.command_chan.send(PrimeTestThreadCommand::Shutdown).unwrap();
@@ -61,16 +84,18 @@ impl PrimeTesterThread {
         }
     }
 
-    fn prime_tester_thread_task(command_recv_chan : Receiver<PrimeTestThreadCommand>, result_send_chan : Sender<PrimeTestThreadResult>) {
+    fn prime_tester_thread_task(command_recv_chan : Receiver<PrimeTestThreadCommand>, result_send_chan : Sender<PrimeTestThreadResult>, state_chan : Sender<PrimeTestThreadState>) {
         loop {
             match command_recv_chan.recv() {
                 Ok(PrimeTestThreadCommand::Test(number)) => {
+                    state_chan.send(PrimeTestThreadState::Testing).unwrap();
                     let result = PrimeTestThreadResult {
-                        number : number,
+                        number,
                         is_prime : check_if_prime(number)
                     };
 
-                    result_send_chan.send(result).unwrap()
+                    result_send_chan.send(result).unwrap();
+                    state_chan.send(PrimeTestThreadState::Idle).unwrap();
                 },
                 Ok(PrimeTestThreadCommand::Shutdown) => break,
                 Err(_) => {}, 
@@ -88,7 +113,7 @@ pub fn n_prime(n : usize, n_threads : usize) -> u64 {
     // setup the found primes buffer and also skip the second prime
     if n == 1 { return 2 }
     let mut p_prime_gen = PotentialPrimesGenerator::new();
-    let mut found_primes : Vec<u64> = vec![p_prime_gen.next().unwrap()];
+    let mut found_primes : BTreeSet<u64> = BTreeSet::from([p_prime_gen.next().unwrap()]);
 
     // spawn the threads and give them a prime to process
     let mut threads : Vec<PrimeTesterThread> = (0..n_threads)
@@ -100,18 +125,19 @@ pub fn n_prime(n : usize, n_threads : usize) -> u64 {
         })
         .collect();
 
-    while found_primes.len() < n {
+    // test new primes while the prime hasn't been found and also while there are still threads active.
+    while found_primes.len() < n || threads.iter_mut().any(|t| t.try_get_state().is_ok_and(|r| r.is_testing())) {
         for thread in threads.iter_mut() {
             if let Ok(result) = thread.try_get_result() {
                 if result.is_prime {
-                    found_primes.push(result.number);
+                    found_primes.insert(result.number);
                 }
-                thread.test_prime(p_prime_gen.next().unwrap())
+                if (found_primes.len() < n) {
+                    thread.test_prime(p_prime_gen.next().unwrap())
+                }
             }
         }
     }
 
-    found_primes.sort();
-
-    return *found_primes.iter().nth(n - 1).unwrap()
+    *found_primes.iter().nth(n - 1).unwrap()
 }
