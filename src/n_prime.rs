@@ -12,7 +12,7 @@ pub fn n_prime(args : &Args) -> u64 {
         }
         result
     };
-    
+
     if !args.quiet {
         println!("calculating the {}th prime with {} worker threads...", args.n, args.threads);
     }
@@ -21,7 +21,11 @@ pub fn n_prime(args : &Args) -> u64 {
     let start_time = if args.quiet { None } else { Some(Instant::now()) };
     // setup the found primes buffer and also skip the second prime
     if args.n == 1 { return complete_result(2, start_time) }
+
+    // setup the generator for making possible primes
     let mut p_prime_gen = PotentialPrimesGenerator::new();
+
+    // set the found primes list to a bst set of just [2] and increment the progress bar once if quiet mode is disabled
     let mut found_primes : BTreeSet<u64> = BTreeSet::from([p_prime_gen.next().unwrap()]);
     progress_bar.as_ref().and_then(|bar| Some(bar.inc(1)));
 
@@ -49,8 +53,7 @@ pub fn n_prime(args : &Args) -> u64 {
             }
         }
     }
+    // complete progress if not quiet and return the result
     progress_bar.and_then(|bar| Some(bar.finish()));
-    let result = *found_primes.iter().nth((args.n - 1) as usize).unwrap();
-
-    complete_result(result, start_time)
+    complete_result(*found_primes.iter().nth((args.n - 1) as usize).unwrap(), start_time)
 }
