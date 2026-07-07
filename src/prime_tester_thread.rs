@@ -25,10 +25,6 @@ enum PrimeTestThreadState {
     Testing
 }
 impl PrimeTestThreadState {
-    pub fn is_idle(&self) -> bool {
-        if let Self::Idle = self { true } else { false }
-    }
-
     pub fn is_testing(&self) -> bool {
         if let Self::Testing = self { true } else { false }
     }
@@ -132,7 +128,7 @@ pub fn n_prime(n : usize, n_threads : usize) -> u64 {
                 if result.is_prime {
                     found_primes.insert(result.number);
                 }
-                if (found_primes.len() < n) {
+                if found_primes.len() < n {
                     thread.test_prime(p_prime_gen.next().unwrap())
                 }
             }
