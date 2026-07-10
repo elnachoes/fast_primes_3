@@ -16,7 +16,13 @@ pub fn n_prime(args : &Args) -> u64 {
     if !args.quiet {
         println!("calculating the {}th prime with {} worker threads...", args.n, args.threads);
     }
-    let progress_bar =  if args.quiet { None } else { Some(ProgressBar::new(args.n)) };
+    let progress_bar =  if args.quiet { None } else {
+        let bar = ProgressBar::new(args.n);
+        bar.set_style(indicatif::ProgressStyle::with_template("[{elapsed_precise}][primes per second : {per_sec}] {bar:100.cyan/green}")
+            .unwrap()
+            .progress_chars("++-"));
+        Some(bar)
+    };
 
     let start_time = if args.quiet { None } else { Some(Instant::now()) };
     // setup the found primes buffer and also skip the second prime
